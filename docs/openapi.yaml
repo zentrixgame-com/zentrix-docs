@@ -1,0 +1,1294 @@
+openapi: 3.0.3
+
+info:
+  title: Zentrix Platform API
+  version: "1.0.0"
+  description: |
+    The **Zentrix Platform API** allows third-party developers to:
+    - Browse and search the game catalog
+    - Manage developer apps (create, update, publish)
+    - Upload game builds and manage depots
+    - Read and write player library / entitlements
+    - Unlock achievements and submit leaderboard scores on behalf of users
+    - Access social features (friends, presence)
+
+    ## Authentication
+
+    Two schemes are supported:
+    - **BearerAuth** — OAuth 2.0 user access token. Required for user-scoped actions.
+    - **ApiKeyAuth** — Developer API key (header `Authorization: ApiKey <key>`). Required for developer actions.
+
+    Tokens are obtained via the OAuth 2.0 authorisation code flow at `/oauth/token`.
+
+  contact:
+    name: Zentrix Developer Support
+    url: https://zentrixgame.com/dev/support
+    email: developers@zentrixgame.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+externalDocs:
+  description: Full documentation
+  url: https://github.com/zentrixgame-com/zentrix-docs/blob/main/docs/API-Reference.md
+
+servers:
+  - url: https://api.zentrixgame.com/v1
+    description: Production
+  - url: https://sandbox.api.zentrixgame.com/v1
+    description: Sandbox (test environment — no real purchases)
+  - url: http://localhost:3000/v1
+    description: Local development
+
+tags:
+  - name: Auth
+    description: OAuth 2.0 authentication and token management
+  - name: Users
+    description: User profile and account information
+  - name: Catalog
+    description: Game catalog — search, browse, and manage apps
+  - name: Library
+    description: Player library and entitlement management
+  - name: Builds
+    description: Build upload and depot management for developers
+  - name: Achievements
+    description: Achievement definitions and runtime unlocking
+  - name: Leaderboards
+    description: Leaderboard management and score submission
+  - name: Social
+    description: Friends, presence, and activity feed
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Security schemes
+# ──────────────────────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: User access token obtained via OAuth 2.0 authorisation code flow.
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Developer API key. Format: `ApiKey zxk_<key>`.
+        Generate keys in Developer Portal → Settings → API Keys.
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Shared schemas
+  # ────────────────────────────────────────────────────────────────────────────
+  schemas:
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: validation_error
+        message:
+          type: string
+          example: "appId is required"
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+        requestId:
+          type: string
+          example: req_01HX9KQPW3
+
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+          example: 20
+        nextCursor:
+          type: string
+          nullable: true
+          example: eyJpZCI6IjAxSFk3In0=
+        hasMore:
+          type: boolean
+          example: true
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: usr_01HX9KQPW3
+        username:
+          type: string
+          example: gamer42
+        displayName:
+          type: string
+          example: "Gamer 42"
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://cdn.zentrixgame.com/avatars/usr_01HX9KQPW3.png
+        createdAt:
+          type: string
+          format: date-time
+
+    App:
+      type: object
+      properties:
+        appId:
+          type: string
+          example: app_01HX9KQPW3
+        name:
+          type: string
+          example: "My Awesome Game"
+        shortDescription:
+          type: string
+          example: "An incredible adventure."
+        headerImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        platforms:
+          type: array
+          items:
+            type: string
+            enum: [windows, macos, linux]
+        tags:
+          type: array
+          items:
+            type: string
+        price:
+          type: number
+          format: float
+          example: 9.99
+        currency:
+          type: string
+          example: USD
+        releaseType:
+          type: string
+          enum: [early_access, full_release]
+        isPublished:
+          type: boolean
+        developerId:
+          type: string
+          example: dev_01HX9KQPW3
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Build:
+      type: object
+      properties:
+        buildId:
+          type: string
+          example: bld_01HX9KQPW3
+        appId:
+          type: string
+          example: app_01HX9KQPW3
+        version:
+          type: string
+          example: "1.2.0"
+        depot:
+          type: string
+          example: windows-base
+        branch:
+          type: string
+          example: default
+        sizeBytes:
+          type: integer
+          format: int64
+          example: 2147483648
+        status:
+          type: string
+          enum: [processing, ready, failed]
+        createdAt:
+          type: string
+          format: date-time
+
+    Achievement:
+      type: object
+      properties:
+        achievementId:
+          type: string
+          example: first_blood
+        appId:
+          type: string
+          example: app_01HX9KQPW3
+        name:
+          type: string
+          example: "First Blood"
+        description:
+          type: string
+          example: "Kill your first enemy."
+        hidden:
+          type: boolean
+          example: false
+        iconLockedUrl:
+          type: string
+          format: uri
+          nullable: true
+        iconUnlockedUrl:
+          type: string
+          format: uri
+          nullable: true
+        points:
+          type: integer
+          example: 10
+
+    UnlockedAchievement:
+      allOf:
+        - $ref: '#/components/schemas/Achievement'
+        - type: object
+          properties:
+            unlockedAt:
+              type: string
+              format: date-time
+
+    Leaderboard:
+      type: object
+      properties:
+        leaderboardId:
+          type: string
+          example: lb_speedrun_any_pct
+        appId:
+          type: string
+          example: app_01HX9KQPW3
+        name:
+          type: string
+          example: "Any% Speedrun"
+        sortOrder:
+          type: string
+          enum: [asc, desc]
+          description: "`asc` = lower is better (time); `desc` = higher is better (score)"
+        displayType:
+          type: string
+          enum: [numeric, time_seconds, time_milliseconds]
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+          example: 1
+        userId:
+          type: string
+          example: usr_01HX9KQPW3
+        username:
+          type: string
+          example: speedrunner99
+        score:
+          type: number
+          format: float
+          example: 183420
+        achievedAt:
+          type: string
+          format: date-time
+
+    LibraryEntry:
+      type: object
+      properties:
+        appId:
+          type: string
+          example: app_01HX9KQPW3
+        entitlementId:
+          type: string
+          example: ent_01HX9KQPW3
+        acquiredAt:
+          type: string
+          format: date-time
+        playTimeMinutes:
+          type: integer
+          example: 120
+        lastPlayedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Friend:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: usr_01HX9KQPW3
+        username:
+          type: string
+          example: myfriend
+        displayName:
+          type: string
+          example: "My Friend"
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        since:
+          type: string
+          format: date-time
+
+    Presence:
+      type: object
+      properties:
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [online, in_game, away, offline]
+        currentAppId:
+          type: string
+          nullable: true
+          example: app_01HX9KQPW3
+        currentAppName:
+          type: string
+          nullable: true
+          example: "My Awesome Game"
+        lastSeenAt:
+          type: string
+          format: date-time
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient permissions for this resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  parameters:
+    AppIdPath:
+      name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: app_01HX9KQPW3
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: usr_01HX9KQPW3
+    LimitQuery:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    CursorQuery:
+      name: cursor
+      in: query
+      schema:
+        type: string
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Paths
+# ──────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── OAuth ──────────────────────────────────────────────────────────────────
+
+  /oauth/token:
+    post:
+      tags: [Auth]
+      summary: Exchange authorisation code or refresh token
+      description: |
+        Supports two grant types:
+        - `authorization_code` — exchange a one-time code from the consent screen
+        - `refresh_token` — get a new access token using a refresh token
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code, refresh_token]
+                code:
+                  type: string
+                  description: Required when grant_type is authorization_code
+                redirect_uri:
+                  type: string
+                  format: uri
+                  description: Must match the URI used in the authorisation request
+                refresh_token:
+                  type: string
+                  description: Required when grant_type is refresh_token
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+      responses:
+        "200":
+          description: Token issued successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    example: 900
+                  refresh_token:
+                    type: string
+                  scope:
+                    type: string
+                    example: "profile library achievements"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /oauth/revoke:
+    post:
+      tags: [Auth]
+      summary: Revoke an access or refresh token
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "204":
+          description: Token revoked
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Users ──────────────────────────────────────────────────────────────────
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get authenticated user profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get a public user profile
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  # ── Catalog ────────────────────────────────────────────────────────────────
+
+  /apps:
+    get:
+      tags: [Catalog]
+      summary: List / search games in the catalog
+      parameters:
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+        - name: q
+          in: query
+          description: Full-text search query
+          schema:
+            type: string
+        - name: tags
+          in: query
+          description: Comma-separated list of tags to filter by
+          schema:
+            type: string
+          example: "rpg,open-world"
+        - name: platform
+          in: query
+          schema:
+            type: string
+            enum: [windows, macos, linux]
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            format: float
+        - name: isFree
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of apps
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/App'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags: [Catalog]
+      summary: Create a new app (developer only)
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, shortDescription, platforms, price]
+              properties:
+                name:
+                  type: string
+                  example: "My Awesome Game"
+                shortDescription:
+                  type: string
+                  maxLength: 160
+                  example: "An incredible adventure."
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                    enum: [windows, macos, linux]
+                price:
+                  type: number
+                  format: float
+                  minimum: 0
+                  example: 9.99
+                releaseType:
+                  type: string
+                  enum: [early_access, full_release]
+                  default: full_release
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 20
+      responses:
+        "201":
+          description: App created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /apps/{appId}:
+    get:
+      tags: [Catalog]
+      summary: Get details of a specific app
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      responses:
+        "200":
+          description: App details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Catalog]
+      summary: Update app metadata (developer only)
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                shortDescription:
+                  type: string
+                  maxLength: 160
+                price:
+                  type: number
+                  format: float
+                  minimum: 0
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Updated app
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Catalog]
+      summary: Delete (unpublish) an app
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      responses:
+        "204":
+          description: App deleted
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  # ── Library ────────────────────────────────────────────────────────────────
+
+  /library:
+    get:
+      tags: [Library]
+      summary: List the authenticated user's library
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        "200":
+          description: Library entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LibraryEntry'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Library]
+      summary: Add a free game to the user's library
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appId]
+              properties:
+                appId:
+                  type: string
+                  example: app_01HX9KQPW3
+      responses:
+        "201":
+          description: Game added to library
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryEntry'
+        "400":
+          description: App is not free or already owned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /library/{appId}:
+    get:
+      tags: [Library]
+      summary: Check if the authenticated user owns an app
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      responses:
+        "200":
+          description: Ownership record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryEntry'
+        "404":
+          description: User does not own this app
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Builds ─────────────────────────────────────────────────────────────────
+
+  /apps/{appId}/builds:
+    get:
+      tags: [Builds]
+      summary: List builds for an app
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+        - name: branch
+          in: query
+          schema:
+            type: string
+          example: default
+      responses:
+        "200":
+          description: List of builds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Build'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Builds]
+      summary: Upload a new build
+      description: |
+        Upload a build artefact as `multipart/form-data`. Large files are automatically split into chunks server-side.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [depot, version, file]
+              properties:
+                depot:
+                  type: string
+                  example: windows-base
+                version:
+                  type: string
+                  example: "1.0.0"
+                file:
+                  type: string
+                  format: binary
+                  description: ZIP archive of build artefacts
+      responses:
+        "201":
+          description: Build upload started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Build'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /apps/{appId}/builds/{buildId}/promote:
+    post:
+      tags: [Builds]
+      summary: Promote a build to a branch
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+        - name: buildId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: bld_01HX9KQPW3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [branch]
+              properties:
+                branch:
+                  type: string
+                  enum: [default, beta, staging]
+      responses:
+        "200":
+          description: Build promoted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Build'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  # ── Achievements ───────────────────────────────────────────────────────────
+
+  /apps/{appId}/achievements:
+    get:
+      tags: [Achievements]
+      summary: List all achievements for an app
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      responses:
+        "200":
+          description: List of achievements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Achievement'
+
+    post:
+      tags: [Achievements]
+      summary: Create an achievement (developer only)
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [achievementId, name, description]
+              properties:
+                achievementId:
+                  type: string
+                  pattern: '^[a-z0-9_]+$'
+                  example: first_blood
+                name:
+                  type: string
+                  example: "First Blood"
+                description:
+                  type: string
+                  example: "Kill your first enemy."
+                hidden:
+                  type: boolean
+                  default: false
+                points:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  default: 10
+      responses:
+        "201":
+          description: Achievement created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Achievement'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /achievements/unlock:
+    post:
+      tags: [Achievements]
+      summary: Unlock an achievement for the authenticated user
+      description: |
+        Called at runtime from your game when the player earns an achievement.
+        Use a user access token (BearerAuth) for this call.
+        Duplicate unlock requests return `409 Conflict`.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appId, achievementId]
+              properties:
+                appId:
+                  type: string
+                  example: app_01HX9KQPW3
+                achievementId:
+                  type: string
+                  example: first_blood
+      responses:
+        "201":
+          description: Achievement unlocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnlockedAchievement'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          description: Achievement not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Achievement already unlocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}/achievements:
+    get:
+      tags: [Achievements]
+      summary: Get a user's unlocked achievements
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+        - name: appId
+          in: query
+          description: Filter by app
+          schema:
+            type: string
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        "200":
+          description: Unlocked achievements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UnlockedAchievement'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Leaderboards ───────────────────────────────────────────────────────────
+
+  /apps/{appId}/leaderboards:
+    get:
+      tags: [Leaderboards]
+      summary: List leaderboards for an app
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      responses:
+        "200":
+          description: List of leaderboards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Leaderboard'
+
+    post:
+      tags: [Leaderboards]
+      summary: Create a leaderboard (developer only)
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leaderboardId, name, sortOrder, displayType]
+              properties:
+                leaderboardId:
+                  type: string
+                  pattern: '^[a-z0-9_]+$'
+                  example: speedrun_any_pct
+                name:
+                  type: string
+                  example: "Any% Speedrun"
+                sortOrder:
+                  type: string
+                  enum: [asc, desc]
+                displayType:
+                  type: string
+                  enum: [numeric, time_seconds, time_milliseconds]
+      responses:
+        "201":
+          description: Leaderboard created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Leaderboard'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /leaderboards/{leaderboardId}/scores:
+    get:
+      tags: [Leaderboards]
+      summary: Fetch leaderboard scores
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaderboardId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: scope
+          in: query
+          description: "`global` returns all players; `friends` returns only the authenticated user's friends"
+          schema:
+            type: string
+            enum: [global, friends]
+            default: global
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        "200":
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaderboardEntry'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Leaderboards]
+      summary: Submit a score
+      description: If the user already has a score, it is only updated if the new score is better (based on the leaderboard's sortOrder).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaderboardId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score]
+              properties:
+                score:
+                  type: number
+                  format: float
+                  example: 183420
+      responses:
+        "200":
+          description: Score submitted (and updated if better)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardEntry'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  # ── Social ─────────────────────────────────────────────────────────────────
+
+  /users/me/friends:
+    get:
+      tags: [Social]
+      summary: List friends of the authenticated user
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        "200":
+          description: Friend list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Friend'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Social]
+      summary: Send a friend request
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  example: usr_01HX9KQPW3
+      responses:
+        "201":
+          description: Friend request sent
+        "409":
+          description: Already friends or request already sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/friends/{userId}:
+    delete:
+      tags: [Social]
+      summary: Remove a friend
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        "204":
+          description: Friend removed
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /users/{userId}/presence:
+    get:
+      tags: [Social]
+      summary: Get a user's online presence
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        "200":
+          description: Presence information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Presence'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
